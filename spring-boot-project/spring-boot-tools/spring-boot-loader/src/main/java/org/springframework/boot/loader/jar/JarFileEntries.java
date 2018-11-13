@@ -50,8 +50,6 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 
 	private static final char NO_SUFFIX = 0;
 
-	protected static final int ENTRY_CACHE_SIZE = 25;
-
 	private final JarFile jarFile;
 
 	private final JarEntryFilter filter;
@@ -67,18 +65,7 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 	private int[] positions;
 
 	private final Map<Integer, FileHeader> entriesCache = Collections
-			.synchronizedMap(new LinkedHashMap<Integer, FileHeader>(16, 0.75f, true) {
-
-				@Override
-				protected boolean removeEldestEntry(
-						Map.Entry<Integer, FileHeader> eldest) {
-					if (JarFileEntries.this.jarFile.isSigned()) {
-						return false;
-					}
-					return size() >= ENTRY_CACHE_SIZE;
-				}
-
-			});
+			.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true));
 
 	JarFileEntries(JarFile jarFile, JarEntryFilter filter) {
 		this.jarFile = jarFile;
@@ -99,6 +86,7 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 	public void visitFileHeader(CentralDirectoryFileHeader fileHeader, int dataOffset) {
 		AsciiBytes name = applyFilter(fileHeader.getName());
 		if (name != null) {
+			entriesCache.put(this.size, fileHeader);
 			add(name, dataOffset);
 		}
 	}
