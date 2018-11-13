@@ -86,7 +86,7 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 	public void visitFileHeader(CentralDirectoryFileHeader fileHeader, int dataOffset) {
 		AsciiBytes name = applyFilter(fileHeader.getName());
 		if (name != null) {
-			entriesCache.put(this.size, fileHeader);
+			this.entriesCache.put(this.size, fileHeader);
 			add(name, dataOffset);
 		}
 	}
