@@ -18,7 +18,6 @@ package org.springframework.boot.loader.jar;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -54,18 +53,8 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 
 	private final JarEntryFilter filter;
 
-	private RandomAccessData centralDirectoryData;
-
-	private int size;
-
-	private int[] hashCodes;
-
-	private int[] centralDirectoryOffsets;
-
-	private int[] positions;
-
-	private final Map<Integer, FileHeader> entriesCache = Collections
-			.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true));
+	private final Map<AsciiBytes, FileHeader> entriesCache = Collections
+			.synchronizedMap(new LinkedHashMap<>(16, 0.75f, false));
 
 	JarFileEntries(JarFile jarFile, JarEntryFilter filter) {
 		this.jarFile = jarFile;
@@ -74,99 +63,41 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 
 	@Override
 	public void visitStart(CentralDirectoryEndRecord endRecord,
-			RandomAccessData centralDirectoryData) {
-		int maxSize = endRecord.getNumberOfRecords();
-		this.centralDirectoryData = centralDirectoryData;
-		this.hashCodes = new int[maxSize];
-		this.centralDirectoryOffsets = new int[maxSize];
-		this.positions = new int[maxSize];
+						   RandomAccessData centralDirectoryData) {
 	}
 
 	@Override
 	public void visitFileHeader(CentralDirectoryFileHeader fileHeader, int dataOffset) {
 		AsciiBytes name = applyFilter(fileHeader.getName());
 		if (name != null) {
-			this.entriesCache.put(this.size, fileHeader);
-			add(name, dataOffset);
+			this.entriesCache.put(name, fileHeader);
 		}
-	}
-
-	private void add(AsciiBytes name, int dataOffset) {
-		this.hashCodes[this.size] = name.hashCode();
-		this.centralDirectoryOffsets[this.size] = dataOffset;
-		this.positions[this.size] = this.size;
-		this.size++;
 	}
 
 	@Override
 	public void visitEnd() {
-		sort(0, this.size - 1);
-		int[] positions = this.positions;
-		this.positions = new int[positions.length];
-		for (int i = 0; i < this.size; i++) {
-			this.positions[positions[i]] = i;
-		}
+
 	}
 
 	int getSize() {
-		return this.size;
-	}
-
-	private void sort(int left, int right) {
-		// Quick sort algorithm, uses hashCodes as the source but sorts all arrays
-		if (left < right) {
-			int pivot = this.hashCodes[left + (right - left) / 2];
-			int i = left;
-			int j = right;
-			while (i <= j) {
-				while (this.hashCodes[i] < pivot) {
-					i++;
-				}
-				while (this.hashCodes[j] > pivot) {
-					j--;
-				}
-				if (i <= j) {
-					swap(i, j);
-					i++;
-					j--;
-				}
-			}
-			if (left < j) {
-				sort(left, j);
-			}
-			if (right > i) {
-				sort(i, right);
-			}
-		}
-	}
-
-	private void swap(int i, int j) {
-		swap(this.hashCodes, i, j);
-		swap(this.centralDirectoryOffsets, i, j);
-		swap(this.positions, i, j);
-	}
-
-	private void swap(int[] array, int i, int j) {
-		int temp = array[i];
-		array[i] = array[j];
-		array[j] = temp;
+		return this.entriesCache.size();
 	}
 
 	@Override
 	public Iterator<JarEntry> iterator() {
-		return new EntryIterator();
+		return new EntryIterator(this.entriesCache.keySet().iterator());
 	}
 
 	public boolean containsEntry(CharSequence name) {
-		return getEntry(name, FileHeader.class, true) != null;
+		return getEntry(name, FileHeader.class) != null;
 	}
 
 	public JarEntry getEntry(CharSequence name) {
-		return getEntry(name, JarEntry.class, true);
+		return getEntry(name, JarEntry.class);
 	}
 
 	public InputStream getInputStream(String name) throws IOException {
-		FileHeader entry = getEntry(name, FileHeader.class, false);
+		FileHeader entry = getEntry(name, FileHeader.class);
 		return getInputStream(entry);
 	}
 
@@ -182,7 +113,7 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 	}
 
 	public RandomAccessData getEntryData(String name) throws IOException {
-		FileHeader entry = getEntry(name, FileHeader.class, false);
+		FileHeader entry = getEntry(name, FileHeader.class);
 		if (entry == null) {
 			return null;
 		}
@@ -202,66 +133,36 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 				+ nameLength + extraLength, entry.getCompressedSize());
 	}
 
-	private <T extends FileHeader> T getEntry(CharSequence name, Class<T> type,
-			boolean cacheEntry) {
-		int hashCode = AsciiBytes.hashCode(name);
-		T entry = getEntry(hashCode, name, NO_SUFFIX, type, cacheEntry);
+	private <T extends FileHeader> T getEntry(CharSequence name, Class<T> type) {
+		AsciiBytes hashCode = new AsciiBytes(name.toString());
+		T entry = getEntry(hashCode, name, NO_SUFFIX, type);
 		if (entry == null) {
-			hashCode = AsciiBytes.hashCode(hashCode, SLASH);
-			entry = getEntry(hashCode, name, SLASH, type, cacheEntry);
+			hashCode = new AsciiBytes(name.toString() + SLASH);
+			entry = getEntry(hashCode, name, SLASH, type);
 		}
 		return entry;
 	}
 
-	private <T extends FileHeader> T getEntry(int hashCode, CharSequence name,
-			char suffix, Class<T> type, boolean cacheEntry) {
-		int index = getFirstIndex(hashCode);
-		while (index >= 0 && index < this.size && this.hashCodes[index] == hashCode) {
-			T entry = getEntry(index, type, cacheEntry);
-			if (entry.hasName(name, suffix)) {
-				return entry;
-			}
-			index++;
+	private <T extends FileHeader> T getEntry(AsciiBytes hashCode, CharSequence name,
+											  char suffix, Class<T> type) {
+		T entry = getEntry(hashCode, type);
+		if (entry.hasName(name, suffix)) {
+			return entry;
 		}
 		return null;
 	}
 
 	@SuppressWarnings("unchecked")
-	private <T extends FileHeader> T getEntry(int index, Class<T> type,
-			boolean cacheEntry) {
-		try {
-			FileHeader cached = this.entriesCache.get(index);
-			FileHeader entry = (cached != null) ? cached
-					: CentralDirectoryFileHeader.fromRandomAccessData(
-							this.centralDirectoryData,
-							this.centralDirectoryOffsets[index], this.filter);
-			if (CentralDirectoryFileHeader.class.equals(entry.getClass())
-					&& type.equals(JarEntry.class)) {
-				entry = new JarEntry(this.jarFile, (CentralDirectoryFileHeader) entry);
-			}
-			if (cacheEntry && cached != entry) {
-				this.entriesCache.put(index, entry);
-			}
-			return (T) entry;
+	private <T extends FileHeader> T getEntry(AsciiBytes name, Class<T> type) {
+		FileHeader entry = this.entriesCache.get(name);
+		if (CentralDirectoryFileHeader.class.equals(entry.getClass())
+				&& type.equals(JarEntry.class)) {
+			entry = new JarEntry(this.jarFile, (CentralDirectoryFileHeader) entry);
 		}
-		catch (IOException ex) {
-			throw new IllegalStateException(ex);
-		}
-	}
-
-	private int getFirstIndex(int hashCode) {
-		int index = Arrays.binarySearch(this.hashCodes, 0, this.size, hashCode);
-		if (index < 0) {
-			return -1;
-		}
-		while (index > 0 && this.hashCodes[index - 1] == hashCode) {
-			index--;
-		}
-		return index;
+		return (T) entry;
 	}
 
 	public void clearCache() {
-		this.entriesCache.clear();
 	}
 
 	private AsciiBytes applyFilter(AsciiBytes name) {
@@ -273,11 +174,15 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 	 */
 	private class EntryIterator implements Iterator<JarEntry> {
 
-		private int index = 0;
+		private Iterator<AsciiBytes> delegate;
+
+		public EntryIterator(Iterator<AsciiBytes> iterator) {
+			this.delegate = iterator;
+		}
 
 		@Override
 		public boolean hasNext() {
-			return this.index < JarFileEntries.this.size;
+			return delegate.hasNext();
 		}
 
 		@Override
@@ -285,9 +190,8 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 			if (!hasNext()) {
 				throw new NoSuchElementException();
 			}
-			int entryIndex = JarFileEntries.this.positions[this.index];
-			this.index++;
-			return getEntry(entryIndex, JarEntry.class, false);
+			AsciiBytes next = delegate.next();
+			return getEntry(next, JarEntry.class);
 		}
 
 	}
