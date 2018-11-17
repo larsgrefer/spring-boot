@@ -62,8 +62,7 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 	}
 
 	@Override
-	public void visitStart(CentralDirectoryEndRecord endRecord,
-						   RandomAccessData centralDirectoryData) {
+	public void visitStart(CentralDirectoryEndRecord endRecord, RandomAccessData centralDirectoryData) {
 	}
 
 	@Override
@@ -143,8 +142,7 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 		return entry;
 	}
 
-	private <T extends FileHeader> T getEntry(AsciiBytes hashCode, CharSequence name,
-											  char suffix, Class<T> type) {
+	private <T extends FileHeader> T getEntry(AsciiBytes hashCode, CharSequence name, char suffix, Class<T> type) {
 		T entry = getEntry(hashCode, type);
 		if (entry.hasName(name, suffix)) {
 			return entry;
@@ -176,13 +174,13 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 
 		private Iterator<AsciiBytes> delegate;
 
-		public EntryIterator(Iterator<AsciiBytes> iterator) {
+		EntryIterator(Iterator<AsciiBytes> iterator) {
 			this.delegate = iterator;
 		}
 
 		@Override
 		public boolean hasNext() {
-			return delegate.hasNext();
+			return this.delegate.hasNext();
 		}
 
 		@Override
@@ -190,7 +188,7 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 			if (!hasNext()) {
 				throw new NoSuchElementException();
 			}
-			AsciiBytes next = delegate.next();
+			AsciiBytes next = this.delegate.next();
 			return getEntry(next, JarEntry.class);
 		}
 
