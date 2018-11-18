@@ -62,7 +62,8 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 	}
 
 	@Override
-	public void visitStart(CentralDirectoryEndRecord endRecord, RandomAccessData centralDirectoryData) {
+	public void visitStart(CentralDirectoryEndRecord endRecord,
+			RandomAccessData centralDirectoryData) {
 	}
 
 	@Override
@@ -142,7 +143,8 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 		return entry;
 	}
 
-	private <T extends FileHeader> T getEntry(AsciiBytes hashCode, CharSequence name, char suffix, Class<T> type) {
+	private <T extends FileHeader> T getEntry(AsciiBytes hashCode, CharSequence name,
+			char suffix, Class<T> type) {
 		T entry = getEntry(hashCode, type);
 		if (entry.hasName(name, suffix)) {
 			return entry;
