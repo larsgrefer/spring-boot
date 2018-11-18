@@ -63,9 +63,9 @@ class CentralDirectoryParser {
 	private void parseEntries(CentralDirectoryEndRecord endRecord,
 			RandomAccessData centralDirectoryData) throws IOException {
 		byte[] bytes = centralDirectoryData.read(0, centralDirectoryData.getSize());
-		CentralDirectoryFileHeader fileHeader = new CentralDirectoryFileHeader();
 		int dataOffset = 0;
 		for (int i = 0; i < endRecord.getNumberOfRecords(); i++) {
+			CentralDirectoryFileHeader fileHeader = new CentralDirectoryFileHeader();
 			fileHeader.load(bytes, dataOffset, null, 0, null);
 			visitFileHeader(dataOffset, fileHeader);
 			dataOffset += CENTRAL_DIRECTORY_HEADER_BASE_SIZE
